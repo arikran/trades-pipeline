@@ -1,0 +1,69 @@
+# Local harness: single-node Kafka (KRaft) + topic init + Postgres + producer + consumer.
+services:
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 5s
+      retries: 20
+
+  # On AWS the topic comes from Terraform (aws_msk_topic). Locally this one-shot job creates it;
+  # broker auto-create stays off in both, so a missing topic fails the same way.
+  kafka-init:
+    image: apache/kafka:3.9.1
+    command: ["/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "kafka:9092", "--create", "--if-not-exists",
+              "--topic", "trades", "--partitions", "6", "--replication-factor", "1"]
+    depends_on:
+      kafka: {condition: service_healthy}
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: trades
+      POSTGRES_USER: trades
+      POSTGRES_HOST_AUTH_METHOD: trust  # local only: no password anywhere in this file
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "trades"]
+      interval: 5s
+      retries: 20
+
+  producer:
+    build: ./app/producer
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_AUTH: none
+    depends_on:
+      kafka-init: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+    restart: unless-stopped
+
+  consumer:
+    build: ./app/consumer
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_AUTH: none
+      DB_HOST: postgres
+      DB_NAME: trades
+      DB_USER: trades
+      DB_SSLMODE: disable
+    depends_on:
+      kafka: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+      producer: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+    restart: unless-stopped

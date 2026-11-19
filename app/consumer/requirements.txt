@@ -1,0 +1,4 @@
+confluent-kafka==2.11.1
+psycopg[binary]==3.2.10
+boto3==1.40.30
+aws-msk-iam-sasl-signer-python==1.0.2
