@@ -1,0 +1,14 @@
+__pycache__/
+.env
+*.tfstate*
+.terraform/
+.envrc
+*.tfvars
+.kube/
+*.pem
+*.tfplan
+*.tfvars.json
+crash.log
+crash.*.log
+kubeconfig*
+.env.*

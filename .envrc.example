@@ -1,0 +1,3 @@
+# Copy to .envrc (gitignored) and run `direnv allow`. No secrets here.
+export AWS_PROFILE=sandbox   # your profile for account 092988563851
+export AWS_REGION=eu-north-1
