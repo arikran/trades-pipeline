@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Expect every command below to print nothing / empty list, except the "OK to remain" items.
+# Read the output, it is not a pass/fail gate. Sections 1-2 use the tagging API, which keeps showing
+# deleted resources (and terminated instances) for up to about an hour: trust sections 3-6 for that window.
 R=eu-north-1; P=arik-rainish; C=$P-eks; B=$P-tfstate-092988563851; T=$P-tflock
 q(){ echo "== $1"; shift; "$@" --region $R --output text; }
 
@@ -34,9 +36,10 @@ q elb-classic   aws elb describe-load-balancers --query 'LoadBalancerDescription
 # 5. Misc
 q log-groups    aws logs describe-log-groups --log-group-name-prefix /aws/eks/$C --query 'logGroups[].logGroupName'
 q secrets       aws secretsmanager list-secrets --include-planned-deletion --filters Key=name,Values=rds --query 'SecretList[].[Name,DeletedDate]'
+q secrets-app   aws secretsmanager list-secrets --include-planned-deletion --filters Key=name,Values=$P --query 'SecretList[].[Name,DeletedDate]'
 q sns           aws sns list-topics --query "Topics[?contains(TopicArn,'$P')].TopicArn"
 q alarms        aws cloudwatch describe-alarms --alarm-name-prefix $P --alarm-types MetricAlarm CompositeAlarm --query '[MetricAlarms[].AlarmName, CompositeAlarms[].AlarmName]'
 echo "== iam-roles"; aws iam list-roles --query "Roles[?starts_with(RoleName,'$P')].RoleName" --output text
 # 6. Backend: state objects stay (fine), lock rows must NOT
 echo "== locks (expect none)"
-aws dynamodb scan --region $R --table-name $T --query 'Items[].LockID.S' --output text | xargs -n1 | grep -v -- '-md5'
+aws dynamodb scan --region $R --table-name $T --query 'Items[].LockID.S' --output text | xargs -n1 | grep -v -- '-md5' || true  # grep exits 1 when there is no lock, which is the good case
