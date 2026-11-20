@@ -4,7 +4,7 @@ REGION := eu-north-1
 TAG    ?= $(shell git rev-parse --short HEAD 2>/dev/null)
 TF     := terraform
 
-.PHONY: help preflight images deploy destroy verify-clean health psql kubeconfig
+.PHONY: help preflight images deploy destroy verify-clean health query kubeconfig
 .DEFAULT_GOAL := help
 
 help: ## list the targets (default)
@@ -44,10 +44,6 @@ kubeconfig: ## writes to the KUBECONFIG file (default ~/.kube/config); set AWS_P
 health: ## one command: OK or ALARM of the composite alarm
 	@aws cloudwatch describe-alarms --alarm-names arik-rainish-health --alarm-types CompositeAlarm --query 'CompositeAlarms[0].StateValue' --region eu-north-1 --output text
 
-psql: ## interactive psql inside the cluster; password fetched at runtime, never printed
-	@secret_arn=$$($(TF) -chdir=infra output -raw db_secret_arn); \
-	host=$$($(TF) -chdir=infra output -raw rds_endpoint); \
-	pw=$$(aws secretsmanager get-secret-value --region $(REGION) --secret-id "$$secret_arn" \
-	  --query SecretString --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])'); \
-	kubectl run psql-$$RANDOM -n pipeline --rm -it --restart=Never --image=postgres:17 \
-	  --env="PGPASSWORD=$$pw" --env="PGSSLMODE=require" -- psql -h "$$host" -U trades -d trades
+query: ## read-only SQL through the consumer pod, e.g. make query SQL=scripts/duplicates.sql
+	@test -n "$(SQL)" || { echo "usage: make query SQL=scripts/duplicates.sql"; exit 1; }
+	@kubectl -n pipeline exec -i deploy/consumer -- python query.py < $(SQL)

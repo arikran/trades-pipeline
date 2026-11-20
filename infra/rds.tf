@@ -44,3 +44,22 @@ resource "aws_db_instance" "this" {
   delete_automated_backups = true
   apply_immediately        = true
 }
+
+# Least-privilege DB user for the consumer. db_init.py (Helm hook, master user) creates it with this
+# password. The password is ephemeral and write-only: it goes straight to Secrets Manager and never
+# lands in the Terraform state.
+ephemeral "random_password" "app_db" {
+  length  = 32
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "app_db" {
+  name                    = "${var.name}-db-app"
+  recovery_window_in_days = 0 # sandbox: destroy and deploy again without a 7-day name lock
+}
+
+resource "aws_secretsmanager_secret_version" "app_db" {
+  secret_id                = aws_secretsmanager_secret.app_db.id
+  secret_string_wo         = jsonencode({ username = "trades_app", password = ephemeral.random_password.app_db.result })
+  secret_string_wo_version = 1
+}

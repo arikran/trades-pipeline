@@ -9,6 +9,7 @@ images:
 roleArns:
   producer: arn:aws:iam::000000000000:role/example-producer
   consumer: arn:aws:iam::000000000000:role/example-consumer
+  db-init: arn:aws:iam::000000000000:role/example-db-init
 
 kafka:
   bootstrap: b-1.example:9098
@@ -19,7 +20,8 @@ kafka:
 db:
   host: example.rds.amazonaws.com
   name: trades
-  secretArn: arn:aws:secretsmanager:eu-north-1:000000000000:secret:example
+  secretArn: arn:aws:secretsmanager:eu-north-1:000000000000:secret:example-app
+  adminSecretArn: arn:aws:secretsmanager:eu-north-1:000000000000:secret:example-master
   sslmode: require
 
 binanceUrl: "wss://stream.binance.com:9443/stream?streams=btcusdt@trade/ethusdt@trade/solusdt@trade/bnbusdt@trade/xrpusdt@trade/adausdt@trade/dogeusdt@trade/avaxusdt@trade/linkusdt@trade"

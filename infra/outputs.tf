@@ -38,6 +38,10 @@ output "db_secret_arn" {
   value = aws_db_instance.this.master_user_secret[0].secret_arn
 }
 
+output "app_db_secret_arn" {
+  value = aws_secretsmanager_secret.app_db.arn
+}
+
 output "ecr_repository_urls" {
   value = { for k, r in aws_ecr_repository.this : k => r.repository_url }
 }

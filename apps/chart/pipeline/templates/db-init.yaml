@@ -1,0 +1,69 @@
+# Helm hook: runs db_init.py (consumer image) before every install and upgrade, before the
+# Deployments. It is the only workload with the master DB secret (IRSA role arik-rainish-db-init):
+# it creates the table, its indexes and the least-privilege role trades_app. Idempotent.
+# Hook resources are recreated on each run (before-hook-creation), so the last Job's logs stay readable.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: db-init
+  labels:
+    {{- include "pipeline.labels" (dict "name" "db-init") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-1"
+    helm.sh/hook-delete-policy: before-hook-creation
+    eks.amazonaws.com/role-arn: {{ index .Values.roleArns "db-init" | quote }}
+    eks.amazonaws.com/sts-regional-endpoints: "true"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init
+  labels:
+    {{- include "pipeline.labels" (dict "name" "db-init") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        {{- include "pipeline.labels" (dict "name" "db-init") | nindent 8 }}
+    spec:
+      serviceAccountName: db-init
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: db-init
+          image: "{{ .Values.images.consumer }}:{{ .Values.imageTag }}"
+          imagePullPolicy: IfNotPresent
+          command: ["python", "db_init.py"]
+          env:
+            - name: AWS_REGION
+              value: {{ .Values.region | quote }}
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.region | quote }}
+            - name: DB_HOST
+              value: {{ .Values.db.host | quote }}
+            - name: DB_NAME
+              value: {{ .Values.db.name | quote }}
+            - name: DB_SSLMODE
+              value: {{ .Values.db.sslmode | quote }}
+            - name: DB_ADMIN_SECRET_ARN
+              value: {{ .Values.db.adminSecretArn | quote }}
+            - name: DB_APP_SECRET_ARN
+              value: {{ .Values.db.secretArn | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -7,15 +7,17 @@ locals {
   msk_group_arn = "${replace(aws_msk_cluster.this.arn, ":cluster/", ":group/")}/trades-writer"
 
   irsa_roles = {
-    producer = { namespace = "pipeline", service_account = "producer" }
-    consumer = { namespace = "pipeline", service_account = "consumer" }
-    keda     = { namespace = "keda", service_account = "keda-operator" }
+    producer  = { namespace = "pipeline", service_account = "producer" }
+    consumer  = { namespace = "pipeline", service_account = "consumer" }
+    keda      = { namespace = "keda", service_account = "keda-operator" }
+    "db-init" = { namespace = "pipeline", service_account = "db-init" }
   }
 
   pod_policies = {
-    producer = data.aws_iam_policy_document.producer.json
-    consumer = data.aws_iam_policy_document.consumer.json
-    keda     = data.aws_iam_policy_document.keda.json
+    producer  = data.aws_iam_policy_document.producer.json
+    consumer  = data.aws_iam_policy_document.consumer.json
+    keda      = data.aws_iam_policy_document.keda.json
+    "db-init" = data.aws_iam_policy_document.db_init.json
   }
 }
 
@@ -81,7 +83,7 @@ data "aws_iam_policy_document" "consumer" {
   statement {
     sid       = "DbSecret"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_db_instance.this.master_user_secret[0].secret_arn]
+    resources = [aws_secretsmanager_secret.app_db.arn] # the app user only, never the master
   }
   statement {
     sid       = "FreshnessMetric"
@@ -111,6 +113,15 @@ data "aws_iam_policy_document" "keda" {
     sid       = "Group"
     actions   = ["kafka-cluster:DescribeGroup"]
     resources = [local.msk_group_arn]
+  }
+}
+
+# db-init (Helm hook Job) is the only workload that reads the master secret.
+data "aws_iam_policy_document" "db_init" {
+  statement {
+    sid       = "DbSecrets"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_db_instance.this.master_user_secret[0].secret_arn, aws_secretsmanager_secret.app_db.arn]
   }
 }
 

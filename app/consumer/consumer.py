@@ -20,16 +20,8 @@ KAFKA_GRACE_S = 120  # Kafka errors tolerated before the heartbeat stops (rollin
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("consumer")
 
-# Run in one transaction behind an advisory lock: two consumers starting together would race on CREATE TABLE.
-DDL = [
-    "SELECT pg_advisory_xact_lock(7001)",
-    """CREATE TABLE IF NOT EXISTS trades (
-    symbol TEXT, trade_id BIGINT, price NUMERIC, quantity NUMERIC, notional NUMERIC,
-    trade_time TIMESTAMPTZ, ingested_at TIMESTAMPTZ DEFAULT now(), PRIMARY KEY (symbol, trade_id))""",
-    # BRIN: tiny time-ordered indexes, so "last 60 s" proof/health queries don't scan millions of rows
-    "CREATE INDEX IF NOT EXISTS trades_ingested_at_brin ON trades USING brin (ingested_at)",
-    "CREATE INDEX IF NOT EXISTS trades_trade_time_brin ON trades USING brin (trade_time)",
-]
+# The table, its indexes and this role's grants come from db_init.py (Helm hook Job, master user).
+# The consumer connects as trades_app: SELECT and INSERT on trades, nothing else.
 INSERT = """INSERT INTO trades (symbol, trade_id, price, quantity, notional, trade_time)
     VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (symbol, trade_id) DO NOTHING"""
 
@@ -119,10 +111,6 @@ def main():
 
     HEARTBEAT.touch()  # alive before the first connect attempt
     db = retry("postgres", db_connect)
-    with db.cursor() as cur:
-        for stmt in DDL:
-            cur.execute(stmt)
-    db.commit()
 
     kafka_failing_since = []  # set by error_cb, cleared by the first message that arrives
 

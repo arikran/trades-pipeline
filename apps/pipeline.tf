@@ -20,16 +20,18 @@ resource "helm_release" "pipeline" {
       consumer = local.infra.ecr_repository_urls["consumer"]
     }
     roleArns = {
-      producer = local.infra.pod_role_arns["producer"]
-      consumer = local.infra.pod_role_arns["consumer"]
+      producer  = local.infra.pod_role_arns["producer"]
+      consumer  = local.infra.pod_role_arns["consumer"]
+      "db-init" = local.infra.pod_role_arns["db-init"]
     }
     kafka = {
       bootstrap = local.infra.msk_bootstrap_brokers_sasl_iam
     }
     db = {
-      host      = local.infra.rds_endpoint
-      name      = local.infra.rds_db_name
-      secretArn = local.infra.db_secret_arn
+      host           = local.infra.rds_endpoint
+      name           = local.infra.rds_db_name
+      secretArn      = local.infra.app_db_secret_arn # consumer: trades_app
+      adminSecretArn = local.infra.db_secret_arn     # db-init hook only: master user
     }
   })]
 }

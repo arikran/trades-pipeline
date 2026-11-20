@@ -50,6 +50,19 @@ services:
       interval: 10s
     restart: unless-stopped
 
+  # Same role as the Helm hook Job on EKS: schema + the least-privilege app role, as the admin user.
+  db-init:
+    build: ./app/consumer
+    command: ["python", "db_init.py"]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: trades
+      DB_ADMIN_USER: trades
+      APP_DB_USER: trades_app
+      DB_SSLMODE: disable
+    depends_on:
+      postgres: {condition: service_healthy}
+
   consumer:
     build: ./app/consumer
     environment:
@@ -57,11 +70,11 @@ services:
       KAFKA_AUTH: none
       DB_HOST: postgres
       DB_NAME: trades
-      DB_USER: trades
+      DB_USER: trades_app
       DB_SSLMODE: disable
     depends_on:
       kafka: {condition: service_healthy}
-      postgres: {condition: service_healthy}
+      db-init: {condition: service_completed_successfully}
       producer: {condition: service_started}
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
