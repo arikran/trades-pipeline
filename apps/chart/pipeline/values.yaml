@@ -1,0 +1,43 @@
+# Filled by apps/pipeline.tf from the infra outputs. Defaults are for `helm template` only.
+region: eu-north-1
+imageTag: none
+images:
+  producer: example.dkr.ecr.eu-north-1.amazonaws.com/arik-rainish-producer
+  consumer: example.dkr.ecr.eu-north-1.amazonaws.com/arik-rainish-consumer
+
+# IRSA role per service account (from the infra output pod_role_arns)
+roleArns:
+  producer: arn:aws:iam::000000000000:role/example-producer
+  consumer: arn:aws:iam::000000000000:role/example-consumer
+
+kafka:
+  bootstrap: b-1.example:9098
+  auth: iam # "none" only for a local Kafka without SASL
+  topic: trades
+  consumerGroup: trades-writer
+
+db:
+  host: example.rds.amazonaws.com
+  name: trades
+  secretArn: arn:aws:secretsmanager:eu-north-1:000000000000:secret:example
+  sslmode: require
+
+binanceUrl: "wss://stream.binance.com:9443/stream?streams=btcusdt@trade/ethusdt@trade/solusdt@trade/bnbusdt@trade/xrpusdt@trade/adausdt@trade/dogeusdt@trade/avaxusdt@trade/linkusdt@trade"
+
+producer:
+  replicas: 2
+
+consumer:
+  terminationGracePeriodSeconds: 30
+  scaling:
+    min: 2
+    # 9 symbol keys hash to 5 of 6 partitions with librdkafka's default partitioner; a 6th consumer would be idle
+    max: 5
+    targetLag: "1000"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

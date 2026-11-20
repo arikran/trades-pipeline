@@ -1,0 +1,7 @@
+apiVersion: v2
+name: pipeline
+description: Binance trades pipeline - producer and consumer on MSK and RDS
+type: application
+# Bump on every template change, otherwise Terraform sees no diff.
+version: 0.1.4
+appVersion: "1.0.0"

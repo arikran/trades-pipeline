@@ -1,0 +1,24 @@
+{{- $env := list
+  (dict "name" "DB_HOST" "value" .Values.db.host)
+  (dict "name" "DB_NAME" "value" .Values.db.name)
+  (dict "name" "DB_SECRET_ARN" "value" .Values.db.secretArn)
+  (dict "name" "DB_SSLMODE" "value" .Values.db.sslmode)
+  (dict "name" "CLOUDWATCH_ENABLED" "value" "true") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer
+  labels:
+    {{- include "pipeline.labels" (dict "name" "consumer") | nindent 4 }}
+spec:
+  # No replicas: KEDA owns the count (ScaledObject consumer).
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: consumer
+  template:
+    {{- include "pipeline.podTemplate" (dict "name" "consumer" "env" $env "root" $ "grace" .Values.consumer.terminationGracePeriodSeconds) | nindent 4 }}

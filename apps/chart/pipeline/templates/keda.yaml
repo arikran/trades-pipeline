@@ -1,0 +1,42 @@
+# KEDA asks Kafka itself for the consumer group's lag (committed offset vs. end offset per partition),
+# authenticating to MSK with the keda-operator IRSA role (infra/iam.tf, role arik-rainish-keda).
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: msk-iam
+spec:
+  podIdentity:
+    provider: aws
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: consumer
+spec:
+  scaleTargetRef:
+    name: consumer
+  minReplicaCount: {{ .Values.consumer.scaling.min }}
+  maxReplicaCount: {{ .Values.consumer.scaling.max }}
+  # If KEDA cannot read the lag (Kafka unreachable, auth error), hold the current count, never fewer than 2.
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+    behavior: currentReplicasIfHigher
+  triggers:
+    - type: kafka
+      {{- if eq .Values.kafka.auth "iam" }}
+      authenticationRef:
+        name: msk-iam
+      {{- end }}
+      metadata:
+        bootstrapServers: {{ .Values.kafka.bootstrap | quote }}
+        consumerGroup: {{ .Values.kafka.consumerGroup | quote }}
+        topic: {{ .Values.kafka.topic | quote }}
+        lagThreshold: {{ .Values.consumer.scaling.targetLag | quote }} # one consumer per 1000 messages of lag
+        offsetResetPolicy: earliest # same as the consumer's auto.offset.reset
+        {{- if eq .Values.kafka.auth "iam" }}
+        sasl: oauthbearer
+        saslTokenProvider: aws_msk_iam
+        tls: enable
+        awsRegion: {{ .Values.region | quote }}
+        {{- end }}
