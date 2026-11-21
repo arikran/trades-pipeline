@@ -45,3 +45,8 @@ output "app_db_secret_arn" {
 output "ecr_repository_urls" {
   value = { for k, r in aws_ecr_repository.this : k => r.repository_url }
 }
+
+output "pod_role_arns" {
+  description = "IRSA role per workload: producer, consumer, keda, db-init"
+  value       = { for k, r in aws_iam_role.pod : k => r.arn }
+}

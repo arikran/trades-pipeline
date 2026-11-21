@@ -132,8 +132,3 @@ resource "aws_iam_role_policy" "pod" {
   role   = aws_iam_role.pod[each.key].id
   policy = local.pod_policies[each.key]
 }
-
-output "pod_role_arns" {
-  description = "IRSA role per workload: producer, consumer, keda"
-  value       = { for k, r in aws_iam_role.pod : k => r.arn }
-}

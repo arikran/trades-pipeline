@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Expect every command below to print nothing / empty list, except the "OK to remain" items.
+# Expect every section below to print nothing. The S3 state objects stay by design (the bucket is provided).
 # Read the output, it is not a pass/fail gate. Sections 1-2 use the tagging API, which keeps showing
 # deleted resources (and terminated instances) for up to about an hour: trust sections 3-6 for that window.
-R=eu-north-1; P=arik-rainish; C=$P-eks; B=$P-tfstate-092988563851; T=$P-tflock
+R=eu-north-1; P=arik-rainish; C=$P-eks; T=$P-tflock
 q(){ echo "== $1"; shift; "$@" --region $R --output text; }
 
 echo "== terraform state (expect empty)"
 terraform -chdir=apps  state list; terraform -chdir=infra state list
 
 # 1. Everything Terraform tagged (provider default_tags Project=trades-pipeline)
+echo "(note: sections 1-2 use the tagging API, which can list deleted resources for up to an hour; sections 3-6 are authoritative)"
 q tagged        aws resourcegroupstaggingapi get-resources --tag-filters Key=Project,Values=trades-pipeline --query 'ResourceTagMappingList[].ResourceARN'
 # 2. Things AWS services created for the cluster (they do not carry our default tag)
 q eks-tagged    aws resourcegroupstaggingapi get-resources --tag-filters Key=eks:cluster-name,Values=$C --query 'ResourceTagMappingList[].ResourceARN'
