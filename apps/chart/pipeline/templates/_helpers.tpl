@@ -50,7 +50,8 @@ spec:
           drop: ["ALL"]
       resources:
         {{- toYaml .root.Values.resources | nindent 8 }}
-      # Heartbeat file younger than 30s (app/*/healthcheck.py). Up to 2 min for the first MSK connect.
+      # Heartbeat file younger than 30s (app/*/healthcheck.py). There is no readiness probe, so the
+      # startup probe is what keeps a new pod not Ready until the process has written its first heartbeat.
       startupProbe:
         exec:
           command: ["python", "healthcheck.py"]
