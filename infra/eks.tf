@@ -10,8 +10,8 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
-  # Access: IAM auth via access entries; public endpoint so reviewers can run kubectl;
-  # destroy does not need cluster access.
+  # Access: IAM auth via access entries; only principals with an entry can reach the API.
+  # make destroy removes the apps layer first, so whoever runs it needs an entry (see README).
   authentication_mode                      = "API"
   enable_cluster_creator_admin_permissions = true
   endpoint_public_access                   = true

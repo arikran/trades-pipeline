@@ -11,7 +11,7 @@ help: ## list the targets (default)
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
 
 preflight: ## checks the tools and the AWS account before deploy
-	@for t in aws terraform helm kubectl docker; do command -v $$t >/dev/null || { echo "missing tool: $$t"; exit 1; }; done
+	@for t in aws terraform kubectl docker; do command -v $$t >/dev/null || { echo "missing tool: $$t"; exit 1; }; done
 	@acct=$$(aws sts get-caller-identity --query Account --output text) || { echo "no AWS credentials: set AWS_PROFILE"; exit 1; }; \
 	  test "$$acct" = 092988563851 || { echo "wrong AWS account: $$acct (expected 092988563851)"; exit 1; }
 	@echo "preflight OK"
