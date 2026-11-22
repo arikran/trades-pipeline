@@ -164,6 +164,11 @@ def main():
                 break
             except psycopg.OperationalError as e:  # DB dropped (e.g. RDS failover): reconnect, retry same batch
                 log.warning("db error (%s); reconnecting", e)
+                try:
+                    db.close()  # do not leak the broken connection
+                except Exception:
+                    pass
+                time.sleep(1)  # an error that survives a reconnect (e.g. disk full) must not spin
                 db = retry("postgres", db_connect)
         try:
             consumer.commit(asynchronous=False)  # only after the DB commit: a crash in between = replay, not loss

@@ -13,7 +13,7 @@ def main():
     with db_connect() as conn:
         conn.read_only = True
         with conn.cursor() as cur:
-            cur.execute(sql)
+            cur.execute(sql, prepare=True)  # prepared = one statement only, so no 'COMMIT; ...' escape
             if cur.description is None:
                 print(cur.statusmessage)
                 return
