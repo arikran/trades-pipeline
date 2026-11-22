@@ -25,6 +25,20 @@ spec:
       labelSelector:
         matchLabels:
           app.kubernetes.io/name: {{ .name }}
+    {{- if .strictHostSpread }}
+    # Hard rule: never both producers on one node. A dead node would stop both, and a new
+    # producer cannot backfill what it never saw.
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: DoNotSchedule
+      # Count only the pods of the same revision: in a rollout the old pods match the label too,
+      # and the second new pod could otherwise land next to the first one.
+      matchLabelKeys:
+        - pod-template-hash
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ .name }}
+    {{- end }}
   containers:
     - name: {{ .name }}
       image: "{{ index .root.Values.images .name }}:{{ .root.Values.imageTag }}"
