@@ -48,8 +48,8 @@ def send(producer, trade):
         try:
             producer.produce(TOPIC, key=trade["s"], value=json.dumps(trade))
             break
-        except BufferError:  # local queue full: Kafka is slow, not Binance. Wait, keep the socket
-            producer.poll(1)
+        except BufferError:  # local queue full: Kafka is slow, not Binance. Wait for room, do not drop.
+            producer.poll(1)  # no heartbeat here: if Kafka stays down, liveness restarts the pod
     producer.poll(0)  # serve delivery callbacks, frees the local queue
     HEARTBEAT.touch()
 
@@ -60,13 +60,18 @@ gaps_unfilled = 0
 def backfill(producer, symbol, first, last):
     """Trades first..last were missed (e.g. reconnect): fetch them over REST, send them like WebSocket trades."""
     global gaps_unfilled
-    sent, from_id = 0, first
+    sent, from_id, empty = 0, first, 0
     try:
         while from_id <= last:
             with urllib.request.urlopen(HISTORY_URL.format(symbol, from_id), timeout=10) as resp:
                 page = json.load(resp)
-            if not page:
-                break
+            if not page:  # the REST history can be a moment behind the stream: ask again, then give up
+                empty += 1
+                if empty > 3:
+                    raise RuntimeError(f"no trades from id {from_id} in the REST history")
+                time.sleep(1)
+                continue
+            empty = 0
             for r in page:
                 if r["id"] > last:
                     break
@@ -77,7 +82,7 @@ def backfill(producer, symbol, first, last):
             if from_id <= last:
                 time.sleep(1)  # 25 weight/page, max 1500/min per producer; Binance IP limit is 6000/min
         log.info("backfilled %d trades for %s", sent, symbol)
-    except Exception as e:  # HTTP error (429 included) or timeout: stop, the stream itself goes on
+    except Exception as e:  # HTTP error (429 included), timeout, or history still behind: stop, the stream goes on
         gaps_unfilled += 1
         log.error("backfill failed for %s %d..%d after %d trades (%s); gaps_unfilled=%d",
                   symbol, first, last, sent, e, gaps_unfilled)
@@ -95,7 +100,7 @@ async def stream(producer, stop):
                     trade = json.loads(raw)["data"]
                     s, t = trade["s"], trade["t"]
                     if s in last_t and t > last_t[s] + 1:  # trade ids are sequential per symbol: a jump = missed trades
-                        await asyncio.to_thread(backfill, producer, s, last_t[s] + 1, t - 1)  # thread: socket stays served
+                        await asyncio.to_thread(backfill, producer, s, last_t[s] + 1, t - 1)  # thread: the event loop stays free
                     send(producer, trade)
                     last_t[s] = max(last_t.get(s, t), t)
                     if stop.is_set():
