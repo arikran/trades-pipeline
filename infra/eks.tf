@@ -1,5 +1,11 @@
 data "aws_caller_identity" "current" {}
 
+# For an assumed role, caller ARN is the session (assumed-role/X/name); the module keys the creator
+# entry on the role ARN. issuer_arn is that role ARN (for an IAM user it equals the user ARN).
+data "aws_iam_session_context" "current" {
+  arn = data.aws_caller_identity.current.arn
+}
+
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "21.29.0"
@@ -18,7 +24,7 @@ module "eks" {
   endpoint_public_access_cidrs             = ["0.0.0.0/0"]
 
   # The creator already has admin (above); a second entry for the same principal would fail the apply.
-  access_entries = contains(["", data.aws_caller_identity.current.arn], var.evaluator_principal_arn) ? {} : {
+  access_entries = contains(["", data.aws_iam_session_context.current.issuer_arn], var.evaluator_principal_arn) ? {} : {
     evaluator = {
       principal_arn = var.evaluator_principal_arn
       policy_associations = {
