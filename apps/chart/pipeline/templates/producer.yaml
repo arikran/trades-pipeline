@@ -8,16 +8,15 @@ metadata:
     {{- include "pipeline.labels" (dict "name" "producer") | nindent 4 }}
 spec:
   replicas: {{ .Values.producer.replicas }}
-  # One producer per node (anti-affinity) and two nodes: a surge pod would have no node to go to.
-  # So a rollout replaces one producer at a time, and the other one keeps sending every trade.
+  # A rollout adds a new producer before it stops an old one, so two always run.
   # Ready only means the process started: wait 30 s more, so the new producer is streaming
-  # before the last old one is stopped.
+  # before an old one is stopped.
   minReadySeconds: 30
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 1
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: producer
