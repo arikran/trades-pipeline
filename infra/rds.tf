@@ -38,6 +38,10 @@ resource "aws_db_instance" "this" {
   publicly_accessible    = false
   multi_az               = false # documented shortcut
 
+  # Fixed windows (UTC) instead of random ones: a single-AZ instance restarts during maintenance.
+  backup_window      = "01:00-02:00"
+  maintenance_window = "fri:22:00-fri:23:00"
+
   # Clean destroy (sandbox, not production)
   skip_final_snapshot      = true
   deletion_protection      = false
