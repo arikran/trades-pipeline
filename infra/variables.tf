@@ -25,7 +25,7 @@ variable "alert_email" {
 }
 
 variable "evaluator_principal_arn" {
-  description = "Optional IAM principal ARN that gets cluster-admin: needed for kubectl, make query and the apps-layer destroy. Empty = none."
+  description = "Optional second IAM principal ARN (user or role) that gets cluster-admin, for kubectl and make query. Empty = none."
   type        = string
   default     = ""
 }

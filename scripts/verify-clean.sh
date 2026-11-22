@@ -6,7 +6,7 @@ R=eu-north-1; P=arik-rainish; C=$P-eks; T=$P-tflock
 q(){ echo "== $1"; shift; "$@" --region $R --output text; }
 
 echo "== terraform state (expect empty)"
-terraform -chdir=apps  state list; terraform -chdir=infra state list
+{ terraform -chdir=apps state list; terraform -chdir=infra state list; } | grep -v '^data\.' || true  # data sources are lookups, not resources
 
 # 1. Everything Terraform tagged (provider default_tags Project=trades-pipeline)
 echo "(note: sections 1-2 use the tagging API, which can list deleted resources for up to an hour; sections 3-6 are authoritative)"

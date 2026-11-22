@@ -17,7 +17,8 @@ module "eks" {
   subnet_ids = module.vpc.private_subnets
 
   # Access: IAM auth via access entries; only principals with an entry can reach the API.
-  # make destroy removes the apps layer first, so whoever runs it needs an entry (see README).
+  # make destroy removes the apps layer first, which needs an entry. Without one it goes on and
+  # deletes the cluster, which removes everything that runs in it (see README).
   authentication_mode                      = "API"
   enable_cluster_creator_admin_permissions = true
   endpoint_public_access                   = true

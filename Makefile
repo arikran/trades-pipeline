@@ -28,12 +28,19 @@ deploy: preflight ## infra (creates the ECR repos), then the images, then the in
 	$(TF) -chdir=apps init -input=false
 	$(TF) -chdir=apps apply -input=false -auto-approve -lock-timeout=5m -var image_tag=$(TAG)
 	$(MAKE) kubeconfig
+	kubectl -n pipeline rollout status deploy/producer --timeout=300s  # helm --wait counts only 1 of 2 producers
 
-destroy: ## reverse order: the in-cluster layer first (must succeed while the cluster exists), then infra
+destroy: ## reverse order: the in-cluster layer first, then infra. Works without Kubernetes access too
 	$(TF) -chdir=apps init -input=false
-	@if aws eks describe-cluster --region $(REGION) --name arik-rainish-eks >/dev/null 2>&1; then 	  $(TF) -chdir=apps destroy -input=false -auto-approve -lock-timeout=5m; 	else echo "cluster arik-rainish-eks not found: skipping the apps destroy (nothing left to remove in it)"; fi
+	@if aws eks describe-cluster --region $(REGION) --name arik-rainish-eks >/dev/null 2>&1; then \
+	  $(TF) -chdir=apps destroy -input=false -auto-approve -lock-timeout=5m || \
+	    echo "apps destroy failed. Going on: deleting the cluster removes everything that runs in it"; \
+	else echo "cluster arik-rainish-eks not found or not readable: skipping the apps destroy"; fi
 	$(TF) -chdir=infra init -input=false
 	$(TF) -chdir=infra destroy -input=false -auto-approve -lock-timeout=5m
+	@# The cluster is gone. A release still recorded in the apps state no longer exists: forget it.
+	@rels=$$($(TF) -chdir=apps state list) || exit 1; \
+	for r in $$(echo "$$rels" | grep '^helm_release\.'); do $(TF) -chdir=apps state rm "$$r" || exit 1; done
 
 verify-clean: ## after destroy: lists anything left behind (expect empty sections)
 	scripts/verify-clean.sh
