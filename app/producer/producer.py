@@ -12,7 +12,7 @@ import time
 import urllib.request
 
 import websockets
-from confluent_kafka import Producer
+from confluent_kafka import KafkaException, Producer
 
 STREAM_URL = os.environ.get("BINANCE_URL", (
     "wss://stream.binance.com:9443/stream?streams=btcusdt@trade/ethusdt@trade/solusdt@trade/"
@@ -100,6 +100,11 @@ async def stream(producer, stop):
                     last_t[s] = max(last_t.get(s, t), t)
                     if stop.is_set():
                         break
+        except KafkaException:
+            # Kafka refused the message (not a Binance problem): end the stream, the heartbeat stops,
+            # and liveness restarts the pod. Retrying the WebSocket would hide it.
+            log.exception("kafka error while producing")
+            raise
         except Exception as e:
             delay = min(30, 2 ** attempt) * random.uniform(0.5, 1)  # exponential backoff + jitter, cap 30s
             attempt += 1
