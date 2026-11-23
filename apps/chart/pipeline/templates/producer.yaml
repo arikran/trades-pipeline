@@ -9,8 +9,8 @@ metadata:
 spec:
   replicas: {{ .Values.producer.replicas }}
   # A rollout adds a new producer before it stops an old one, so two always run.
-  # Ready only means the process started: wait 30 s more, so the new producer is streaming
-  # before an old one is stopped.
+  # Ready only means the process started: wait 30 s more before an old one is stopped, which in
+  # practice is enough for the new producer to connect (a timer, not a proof that it streams).
   minReadySeconds: 30
   strategy:
     type: RollingUpdate

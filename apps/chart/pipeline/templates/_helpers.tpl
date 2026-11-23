@@ -26,10 +26,10 @@ spec:
         matchLabels:
           app.kubernetes.io/name: {{ .name }}
   {{- if .onePerNode }}
-  # Never two of these pods on one node: a dead node would stop both producers, and a new
+  # Never two of these pods of the same revision on one node: a dead node would stop both producers, and a new
   # producer cannot backfill what it never saw. With no free node the pod stays Pending.
   # matchLabelKeys: only pods of the same revision count, so during a rollout an old pod does
-  # not block a new one, and the surge pod has somewhere to go.
+  # not block a new one (as long as the old pods were created with this rule too).
   affinity:
     podAntiAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

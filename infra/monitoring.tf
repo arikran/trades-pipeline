@@ -48,7 +48,7 @@ resource "aws_cloudwatch_metric_alarm" "lag" {
   }
 }
 
-# Messages waiting in the busiest partition. Normal peaks were under 600 over 48 hours; with the
+# Messages waiting in the busiest partition. Apart from tests, hourly peaks stayed under 600; with the
 # consumers stopped it grew by about 10,000 a minute. Unlike the time lag, it grows when no one reads.
 resource "aws_cloudwatch_metric_alarm" "backlog" {
   alarm_name          = "${var.name}-backlog"

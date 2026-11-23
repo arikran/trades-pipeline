@@ -28,7 +28,7 @@ deploy: preflight ## infra (creates the ECR repos), then the images, then the in
 	$(TF) -chdir=apps init -input=false
 	$(TF) -chdir=apps apply -input=false -auto-approve -lock-timeout=5m -var image_tag=$(TAG)
 	$(MAKE) kubeconfig
-	kubectl -n pipeline rollout status deploy/producer --timeout=300s  # helm --wait may return before both producers are new
+	kubectl -n pipeline rollout status deploy/producer --timeout=300s  # helm --wait does not wait for minReadySeconds or the last old pod
 
 destroy: ## reverse order: the in-cluster layer first, then infra. Works without Kubernetes access too
 	$(TF) -chdir=apps init -input=false
