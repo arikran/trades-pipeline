@@ -116,7 +116,7 @@ The assignment notes that volume varies by an order of magnitude. KEDA scales th
 
 ## Evidence
 
-All of these ran on EKS, on 21.11 and 22.11. Times in the prose are UTC; the AWS CLI printed its timestamps in my local time (`+02:00`). `make query` is explained under "Re-running the proofs". `[...]` marks lines I cut from the output. Pod names differ between proofs because I deployed new versions on 22.11. Proofs 1 to 6 ran on the versions of 21.11 and of 22.11 before 19:50 UTC; proof 7 shows the final version, and proof 8 the whole table after everything.
+All of these ran on EKS, between 21.11 and 23.11. Times in the prose are UTC; the AWS CLI printed its timestamps in my local time (`+02:00`). `make query` is explained under "Re-running the proofs". `[...]` marks lines I cut from the output. Pod names differ between proofs because I deployed new versions on 22.11 and restarted the producers on 23.11. Proofs 1 to 6 ran on the versions of 21.11 and of 22.11 before 19:50 UTC; proof 7 shows the final version, 7b a rollout under it on 23.11, and proof 8 the whole table.
 
 | # | What it shows | Result |
 |---|---|---|
@@ -127,6 +127,7 @@ All of these ran on EKS, on 21.11 and 22.11. Times in the prose are UTC; the AWS
 | 5 / 5b | Producer dies / Binance drops | the second producer covers; reconnect and backfill of 3,936 trades, RESTARTS 0 |
 | 6 | 24 h freshness | worst value under 3 s in 22 of 24 hours; the 2 exceptions are my tests |
 | 7 | Final version `86ec2b6` | rollout done, 0 duplicates, 0 missing, health OK |
+| 7b | A rollout under the final rule | two producers or more in every minute; 0 missing |
 | 8 | Whole table | 23,642,603 trades, 0 missing |
 
 ### 1. Trades flow into the table
@@ -524,9 +525,52 @@ OK
 
 The gap check covers the hour with both producer rollouts of that evening, the stuck one included.
 
+### 7b. A rollout under the final rule
+
+The rollout in proof 7 started from pods created under the earlier rule. To see a normal rollout, I restarted the producers on 23.11 (same image, `86ec2b6`):
+
+```
+$ date -u; kubectl -n pipeline rollout restart deploy/producer && kubectl -n pipeline rollout status deploy/producer --timeout=300s; date -u
+Mon Nov 23 10:09:21 UTC 2026
+deployment.apps/producer restarted
+Waiting for deployment "producer" rollout to finish: 1 out of 2 new replicas have been updated...
+[...]
+Waiting for deployment "producer" rollout to finish: 1 old replicas are pending termination...
+deployment "producer" successfully rolled out
+Mon Nov 23 10:10:45 UTC 2026
+```
+
+A watch in a second terminal, with a UTC time on each line (columns cut):
+
+```
+10:09:24 producer-7f7cd6b45b-zpvnq   0/1     Pending             ip-10-0-34-105.eu-north-1.compute.internal
+10:09:35 producer-7f7cd6b45b-zpvnq   1/1     Running             ip-10-0-34-105.eu-north-1.compute.internal
+10:10:04 producer-744bfb8547-vmtkw   1/1     Terminating         ip-10-0-34-105.eu-north-1.compute.internal
+10:10:04 producer-7f7cd6b45b-vn42t   0/1     Pending             ip-10-0-6-235.eu-north-1.compute.internal
+10:10:15 producer-7f7cd6b45b-vn42t   1/1     Running             ip-10-0-6-235.eu-north-1.compute.internal
+10:10:45 producer-744bfb8547-68fhp   1/1     Terminating         ip-10-0-6-235.eu-north-1.compute.internal
+```
+
+Each producer sends every trade, so while two run, the consumer skips one duplicate per inserted row. Per minute, from the consumer logs:
+
+```
+$ kubectl logs -n pipeline -l app.kubernetes.io/name=consumer --since=10m --tail=-1 | awk '/duplicates_skipped/{gsub(",","");m=substr($2,1,5);i[m]+=$7;d[m]+=$9} END{for(k in i) print k, "inserted", i[k], "dups", d[k]}' | sort
+[...]
+10:07 inserted 3954 dups 3954
+10:08 inserted 3870 dups 3870
+10:09 inserted 3542 dups 5642
+10:10 inserted 3583 dups 6544
+10:11 inserted 2540 dups 2540
+$ sed "s/10 minutes/60 minutes/" scripts/gaps.sql | kubectl -n pipeline exec -i deploy/consumer -- python query.py && make health
+[...] every symbol: missing 0
+OK
+```
+
+The new producer started next to an old one and was never Pending; each old producer stopped 30 s after its replacement was Ready. Every minute had at least as many duplicates as inserts, so two producers ran throughout; in 10:09 and 10:10 three ran. The old pods ended `Completed`: they flushed and exited with code 0.
+
 ### 8. The whole table
 
-After everything above, the gap check over the whole table, since the first trade on 20.11:
+After proofs 1 to 7 (22.11, 20:26 UTC), the gap check over the whole table, since the first trade on 20.11:
 
 ```
 $ time (echo "SELECT now() AS checked_at, symbol, count(*) AS rows, max(trade_id) - min(trade_id) + 1 - count(*) AS missing FROM trades GROUP BY symbol ORDER BY symbol;" | kubectl -n pipeline exec -i deploy/consumer -- python query.py)
@@ -562,7 +606,7 @@ real    0m18.427s
 - RDS is single-AZ (`db.t4g.micro`). Production: Multi-AZ.
 - No RDS Proxy. With one small instance and a few connections it would add cost without a gain.
 - MSK is 3 `kafka.t3.small` brokers, topic `trades` with 6 partitions, replication factor 3, `min.insync.replicas=2`, retention 24 hours.
-- The node group is 2 nodes, `max_size` 3, with no node autoscaler. Five consumers and two producers fit on two `t3.medium` nodes. The two producers never share a node (required pod anti-affinity), so if a node fails, its producer stays `Pending` until the node group replaces the node, while the other producer keeps sending. During a rollout only pods of the same revision count for that rule, so a new producer starts next to an old one, and an old one is stopped only after the new one has been Ready for 30 s. Two producers run throughout a normal rollout.
+- The node group is 2 nodes, `max_size` 3, with no node autoscaler. Five consumers and two producers fit on two `t3.medium` nodes. The two producers never share a node (required pod anti-affinity), so if a node fails, its producer stays `Pending` until the node group replaces the node, while the other producer keeps sending. During a rollout only pods of the same revision count for that rule, so a new producer starts next to an old one, and an old one is stopped only after the new one has been Ready for 30 s. Two producers run throughout a normal rollout (proof 7b).
 - No automated RDS backups (retention 0, so destroy leaves nothing). Production: 7+ days with point-in-time restore.
 - RDS storage starts at 20 GB and can grow to 100 GB (`max_allocated_storage`). There is no retention policy, so the table keeps growing. Production: partition by day and drop old partitions.
 
